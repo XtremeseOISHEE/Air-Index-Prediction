@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AirSense Dhaka - AQI Prediction Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+    min-height: 100vh;
+    color: #1a1a1a;
+    padding: 24px;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+
+  header {
+    text-align: center;
+    color: #ffffff;
+    padding: 32px 16px 40px;
+  }
+  header .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+  }
+  header h1 {
+    font-size: 34px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #7ee8fa, #eec0c6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p { font-size: 15px; color: rgba(255,255,255,0.75); max-width: 520px; margin: 0 auto; }
+
+  .card {
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 28px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    margin-bottom: 24px;
+  }
+
+  .controls { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 28px; }
+  .control-group { flex: 1; min-width: 180px; }
+  .control-group label {
+    display: block; font-size: 13px; font-weight: 600;
+    color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  select {
+    width: 100%; padding: 12px 14px; font-size: 15px;
+    border: 2px solid #e2e8f0; border-radius: 12px;
+    background: #f8fafc; color: #1a1a1a; cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  select:hover, select:focus { border-color: #2c5364; outline: none; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-box {
+    border-radius: 16px; padding: 20px; text-align: center;
+    transition: transform 0.2s;
+  }
+  .stat-box:hover { transform: translateY(-3px); }
+  .stat-box .label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; margin-bottom: 8px; }
+  .stat-box .value { font-size: 28px; font-weight: 700; }
+  .stat-box .sub { font-size: 12px; margin-top: 4px; opacity: 0.75; }
+
+  .box-pm { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+  .box-aqi { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: #fff; }
+  .box-risk { transition: background 0.3s; color: #fff; }
+
+  .chart-title { font-size: 14px; font-weight: 600; color: #64748b; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .chart-wrap { position: relative; width: 100%; height: 260px; }
+
+  footer {
+    text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;
+    padding: 20px 0 8px;
+  }
+
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: 1fr; }
+    header h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="badge">FINAL YEAR ML PROJECT &middot; CSE-457</div>
+    <h1>AirSense Dhaka</h1>
+    <p>Time-series AQI prediction and pollution pattern clustering using machine learning, trained on 2016-2022 hourly PM2.5 data</p>
+  </header>
+
+  <div class="card">
+    <div class="controls">
+      <div class="control-group">
+        <label for="monthSel">Month</label>
+        <select id="monthSel"></select>
+      </div>
+      <div class="control-group">
+        <label for="hourSel">Hour</label>
+        <select id="hourSel"></select>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat-box box-pm">
+        <div class="label">Predicted PM2.5</div>
+        <div class="value" id="pmOut">--</div>
+        <div class="sub">micrograms per cubic meter</div>
+      </div>
+      <div class="stat-box box-aqi">
+        <div class="label">Air Quality Index</div>
+        <div class="value" id="aqiOut">--</div>
+        <div class="sub" id="aqiCatOut">--</div>
+      </div>
+      <div class="stat-box box-risk" id="riskBox">
+        <div class="label">Risk cluster</div>
+        <div class="value" id="riskOut" style="font-size:18px;">--</div>
+        <div class="sub" id="riskSub">from K-means clustering</div>
+      </div>
+    </div>
+
+    <div class="chart-title">24-hour PM2.5 pattern for selected month</div>
+    <div class="chart-wrap">
+      <canvas id="dayChart" role="img" aria-label="Line chart of predicted PM2.5 across 24 hours for the selected month"></canvas>
+    </div>
+  </div>
+
+  <footer>Built with Linear Regression, Random Forest, Neural Network (MLP) and LSTM &middot; K-means clustering and PCA &middot; Data source: World Air Quality Index project</footer>
+</div>
+
+<script>
+const data = [{"month": 1, "hour": 0, "pm25_raw": 234.3, "aqi": 278.8, "cluster": 0}, {"month": 1, "hour": 1, "pm25_raw": 228.8, "aqi": 279.1, "cluster": 0}, {"month": 1, "hour": 2, "pm25_raw": 225.1, "aqi": 277.3, "cluster": 0}, {"month": 1, "hour": 3, "pm25_raw": 217.5, "aqi": 272.9, "cluster": 0}, {"month": 1, "hour": 4, "pm25_raw": 214.0, "aqi": 269.2, "cluster": 0}, {"month": 1, "hour": 5, "pm25_raw": 206.9, "aqi": 264.7, "cluster": 0}, {"month": 1, "hour": 6, "pm25_raw": 210.0, "aqi": 263.7, "cluster": 0}, {"month": 1, "hour": 7, "pm25_raw": 212.5, "aqi": 264.0, "cluster": 0}, {"month": 1, "hour": 8, "pm25_raw": 218.4, "aqi": 265.5, "cluster": 0}, {"month": 1, "hour": 9, "pm25_raw": 215.5, "aqi": 265.3, "cluster": 0}, {"month": 1, "hour": 10, "pm25_raw": 197.2, "aqi": 257.5, "cluster": 0}, {"month": 1, "hour": 11, "pm25_raw": 174.3, "aqi": 243.5, "cluster": 0}, {"month": 1, "hour": 12, "pm25_raw": 152.1, "aqi": 227.7, "cluster": 0}, {"month": 1, "hour": 13, "pm25_raw": 137.7, "aqi": 214.8, "cluster": 0}, {"month": 1, "hour": 14, "pm25_raw": 128.6, "aqi": 205.3, "cluster": 0}, {"month": 1, "hour": 15, "pm25_raw": 125.0, "aqi": 198.9, "cluster": 0}, {"month": 1, "hour": 16, "pm25_raw": 121.4, "aqi": 194.3, "cluster": 0}, {"month": 1, "hour": 17, "pm25_raw": 127.3, "aqi": 193.6, "cluster": 0}, {"month": 1, "hour": 18, "pm25_raw": 153.7, "aqi": 201.9, "cluster": 0}, {"month": 1, "hour": 19, "pm25_raw": 181.8, "aqi": 216.1, "cluster": 0}, {"month": 1, "hour": 20, "pm25_raw": 206.4, "aqi": 235.1, "cluster": 0}, {"month": 1, "hour": 21, "pm25_raw": 220.1, "aqi": 251.9, "cluster": 0}, {"month": 1, "hour": 22, "pm25_raw": 231.6, "aqi": 266.3, "cluster": 0}, {"month": 1, "hour": 23, "pm25_raw": 236.3, "aqi": 275.8, "cluster": 0}, {"month": 2, "hour": 0, "pm25_raw": 197.1, "aqi": 248.9, "cluster": 0}, {"month": 2, "hour": 1, "pm25_raw": 197.3, "aqi": 250.2, "cluster": 0}, {"month": 2, "hour": 2, "pm25_raw": 202.0, "aqi": 254.7, "cluster": 0}, {"month": 2, "hour": 3, "pm25_raw": 199.8, "aqi": 254.7, "cluster": 0}, {"month": 2, "hour": 4, "pm25_raw": 194.5, "aqi": 252.6, "cluster": 0}, {"month": 2, "hour": 5, "pm25_raw": 188.5, "aqi": 249.1, "cluster": 0}, {"month": 2, "hour": 6, "pm25_raw": 185.1, "aqi": 246.2, "cluster": 0}, {"month": 2, "hour": 7, "pm25_raw": 194.1, "aqi": 247.7, "cluster": 0}, {"month": 2, "hour": 8, "pm25_raw": 199.4, "aqi": 250.3, "cluster": 0}, {"month": 2, "hour": 9, "pm25_raw": 202.0, "aqi": 252.2, "cluster": 0}, {"month": 2, "hour": 10, "pm25_raw": 182.2, "aqi": 243.2, "cluster": 0}, {"month": 2, "hour": 11, "pm25_raw": 148.9, "aqi": 226.1, "cluster": 0}, {"month": 2, "hour": 12, "pm25_raw": 132.9, "aqi": 209.6, "cluster": 0}, {"month": 2, "hour": 13, "pm25_raw": 127.3, "aqi": 201.9, "cluster": 0}, {"month": 2, "hour": 14, "pm25_raw": 107.3, "aqi": 191.2, "cluster": 1}, {"month": 2, "hour": 15, "pm25_raw": 107.6, "aqi": 183.0, "cluster": 1}, {"month": 2, "hour": 16, "pm25_raw": 99.5, "aqi": 176.9, "cluster": 1}, {"month": 2, "hour": 17, "pm25_raw": 99.7, "aqi": 176.1, "cluster": 1}, {"month": 2, "hour": 18, "pm25_raw": 113.0, "aqi": 179.3, "cluster": 1}, {"month": 2, "hour": 19, "pm25_raw": 146.7, "aqi": 191.8, "cluster": 0}, {"month": 2, "hour": 20, "pm25_raw": 174.9, "aqi": 207.3, "cluster": 0}, {"month": 2, "hour": 21, "pm25_raw": 183.7, "aqi": 222.1, "cluster": 0}, {"month": 2, "hour": 22, "pm25_raw": 192.5, "aqi": 234.0, "cluster": 0}, {"month": 2, "hour": 23, "pm25_raw": 196.7, "aqi": 242.4, "cluster": 0}, {"month": 3, "hour": 0, "pm25_raw": 136.8, "aqi": 199.5, "cluster": 3}, {"month": 3, "hour": 1, "pm25_raw": 138.6, "aqi": 202.7, "cluster": 3}, {"month": 3, "hour": 2, "pm25_raw": 140.0, "aqi": 203.4, "cluster": 3}, {"month": 3, "hour": 3, "pm25_raw": 140.8, "aqi": 205.3, "cluster": 0}, {"month": 3, "hour": 4, "pm25_raw": 136.4, "aqi": 204.6, "cluster": 3}, {"month": 3, "hour": 5, "pm25_raw": 134.1, "aqi": 202.7, "cluster": 0}, {"month": 3, "hour": 6, "pm25_raw": 138.0, "aqi": 203.5, "cluster": 0}, {"month": 3, "hour": 7, "pm25_raw": 146.6, "aqi": 206.0, "cluster": 0}, {"month": 3, "hour": 8, "pm25_raw": 146.0, "aqi": 208.3, "cluster": 0}, {"month": 3, "hour": 9, "pm25_raw": 138.2, "aqi": 206.2, "cluster": 0}, {"month": 3, "hour": 10, "pm25_raw": 118.7, "aqi": 196.6, "cluster": 0}, {"month": 3, "hour": 11, "pm25_raw": 104.0, "aqi": 186.5, "cluster": 1}, {"month": 3, "hour": 12, "pm25_raw": 93.4, "aqi": 177.7, "cluster": 1}, {"month": 3, "hour": 13, "pm25_raw": 83.5, "aqi": 170.2, "cluster": 1}, {"month": 3, "hour": 14, "pm25_raw": 77.1, "aqi": 164.5, "cluster": 1}, {"month": 3, "hour": 15, "pm25_raw": 76.6, "aqi": 161.5, "cluster": 1}, {"month": 3, "hour": 16, "pm25_raw": 74.4, "aqi": 158.7, "cluster": 1}, {"month": 3, "hour": 17, "pm25_raw": 78.1, "aqi": 159.0, "cluster": 1}, {"month": 3, "hour": 18, "pm25_raw": 84.9, "aqi": 162.0, "cluster": 1}, {"month": 3, "hour": 19, "pm25_raw": 102.9, "aqi": 168.9, "cluster": 1}, {"month": 3, "hour": 20, "pm25_raw": 122.6, "aqi": 177.7, "cluster": 1}, {"month": 3, "hour": 21, "pm25_raw": 128.0, "aqi": 184.0, "cluster": 1}, {"month": 3, "hour": 22, "pm25_raw": 129.9, "aqi": 189.1, "cluster": 1}, {"month": 3, "hour": 23, "pm25_raw": 133.6, "aqi": 193.9, "cluster": 1}, {"month": 4, "hour": 0, "pm25_raw": 68.0, "aqi": 144.9, "cluster": 3}, {"month": 4, "hour": 1, "pm25_raw": 63.5, "aqi": 142.3, "cluster": 3}, {"month": 4, "hour": 2, "pm25_raw": 61.5, "aqi": 138.8, "cluster": 3}, {"month": 4, "hour": 3, "pm25_raw": 63.2, "aqi": 137.2, "cluster": 3}, {"month": 4, "hour": 4, "pm25_raw": 63.7, "aqi": 137.0, "cluster": 3}, {"month": 4, "hour": 5, "pm25_raw": 68.6, "aqi": 139.2, "cluster": 3}, {"month": 4, "hour": 6, "pm25_raw": 71.0, "aqi": 141.4, "cluster": 3}, {"month": 4, "hour": 7, "pm25_raw": 76.8, "aqi": 146.8, "cluster": 3}, {"month": 4, "hour": 8, "pm25_raw": 76.3, "aqi": 148.3, "cluster": 3}, {"month": 4, "hour": 9, "pm25_raw": 69.6, "aqi": 146.8, "cluster": 3}, {"month": 4, "hour": 10, "pm25_raw": 64.0, "aqi": 144.3, "cluster": 3}, {"month": 4, "hour": 11, "pm25_raw": 62.1, "aqi": 142.4, "cluster": 1}, {"month": 4, "hour": 12, "pm25_raw": 56.7, "aqi": 139.6, "cluster": 1}, {"month": 4, "hour": 13, "pm25_raw": 55.3, "aqi": 137.9, "cluster": 1}, {"month": 4, "hour": 14, "pm25_raw": 57.5, "aqi": 137.6, "cluster": 1}, {"month": 4, "hour": 15, "pm25_raw": 52.3, "aqi": 135.1, "cluster": 1}, {"month": 4, "hour": 16, "pm25_raw": 56.0, "aqi": 135.1, "cluster": 1}, {"month": 4, "hour": 17, "pm25_raw": 53.0, "aqi": 134.2, "cluster": 1}, {"month": 4, "hour": 18, "pm25_raw": 56.3, "aqi": 135.8, "cluster": 1}, {"month": 4, "hour": 19, "pm25_raw": 61.7, "aqi": 140.9, "cluster": 1}, {"month": 4, "hour": 20, "pm25_raw": 68.0, "aqi": 145.3, "cluster": 1}, {"month": 4, "hour": 21, "pm25_raw": 73.4, "aqi": 148.0, "cluster": 1}, {"month": 4, "hour": 22, "pm25_raw": 72.7, "aqi": 148.8, "cluster": 1}, {"month": 4, "hour": 23, "pm25_raw": 69.4, "aqi": 146.6, "cluster": 1}, {"month": 5, "hour": 0, "pm25_raw": 62.6, "aqi": 133.4, "cluster": 3}, {"month": 5, "hour": 1, "pm25_raw": 63.9, "aqi": 133.0, "cluster": 3}, {"month": 5, "hour": 2, "pm25_raw": 62.0, "aqi": 131.1, "cluster": 3}, {"month": 5, "hour": 3, "pm25_raw": 57.3, "aqi": 126.7, "cluster": 3}, {"month": 5, "hour": 4, "pm25_raw": 59.2, "aqi": 124.2, "cluster": 3}, {"month": 5, "hour": 5, "pm25_raw": 60.9, "aqi": 125.6, "cluster": 3}, {"month": 5, "hour": 6, "pm25_raw": 60.9, "aqi": 125.6, "cluster": 3}, {"month": 5, "hour": 7, "pm25_raw": 67.4, "aqi": 129.6, "cluster": 3}, {"month": 5, "hour": 8, "pm25_raw": 66.3, "aqi": 130.5, "cluster": 3}, {"month": 5, "hour": 9, "pm25_raw": 62.0, "aqi": 128.9, "cluster": 3}, {"month": 5, "hour": 10, "pm25_raw": 54.3, "aqi": 128.8, "cluster": 3}, {"month": 5, "hour": 11, "pm25_raw": 53.8, "aqi": 125.6, "cluster": 3}, {"month": 5, "hour": 12, "pm25_raw": 47.1, "aqi": 121.8, "cluster": 1}, {"month": 5, "hour": 13, "pm25_raw": 45.6, "aqi": 118.4, "cluster": 1}, {"month": 5, "hour": 14, "pm25_raw": 44.1, "aqi": 115.8, "cluster": 1}, {"month": 5, "hour": 15, "pm25_raw": 45.4, "aqi": 114.2, "cluster": 1}, {"month": 5, "hour": 16, "pm25_raw": 44.7, "aqi": 112.8, "cluster": 1}, {"month": 5, "hour": 17, "pm25_raw": 45.2, "aqi": 113.5, "cluster": 1}, {"month": 5, "hour": 18, "pm25_raw": 48.7, "aqi": 116.8, "cluster": 1}, {"month": 5, "hour": 19, "pm25_raw": 57.0, "aqi": 123.4, "cluster": 1}, {"month": 5, "hour": 20, "pm25_raw": 59.0, "aqi": 129.3, "cluster": 1}, {"month": 5, "hour": 21, "pm25_raw": 63.8, "aqi": 134.0, "cluster": 1}, {"month": 5, "hour": 22, "pm25_raw": 63.0, "aqi": 135.2, "cluster": 1}, {"month": 5, "hour": 23, "pm25_raw": 64.1, "aqi": 135.2, "cluster": 1}, {"month": 6, "hour": 0, "pm25_raw": 40.3, "aqi": 107.7, "cluster": 3}, {"month": 6, "hour": 1, "pm25_raw": 44.7, "aqi": 111.5, "cluster": 3}, {"month": 6, "hour": 2, "pm25_raw": 39.4, "aqi": 108.5, "cluster": 3}, {"month": 6, "hour": 3, "pm25_raw": 33.8, "aqi": 101.2, "cluster": 3}, {"month": 6, "hour": 4, "pm25_raw": 37.7, "aqi": 100.2, "cluster": 3}, {"month": 6, "hour": 5, "pm25_raw": 37.1, "aqi": 99.4, "cluster": 3}, {"month": 6, "hour": 6, "pm25_raw": 36.7, "aqi": 98.5, "cluster": 3}, {"month": 6, "hour": 7, "pm25_raw": 36.2, "aqi": 97.6, "cluster": 3}, {"month": 6, "hour": 8, "pm25_raw": 35.5, "aqi": 97.2, "cluster": 3}, {"month": 6, "hour": 9, "pm25_raw": 35.9, "aqi": 96.8, "cluster": 3}, {"month": 6, "hour": 10, "pm25_raw": 35.0, "aqi": 96.6, "cluster": 3}, {"month": 6, "hour": 11, "pm25_raw": 32.7, "aqi": 96.3, "cluster": 3}, {"month": 6, "hour": 12, "pm25_raw": 31.2, "aqi": 93.3, "cluster": 1}, {"month": 6, "hour": 13, "pm25_raw": 31.3, "aqi": 91.1, "cluster": 1}, {"month": 6, "hour": 14, "pm25_raw": 29.8, "aqi": 89.6, "cluster": 1}, {"month": 6, "hour": 15, "pm25_raw": 29.1, "aqi": 88.6, "cluster": 1}, {"month": 6, "hour": 16, "pm25_raw": 30.5, "aqi": 89.2, "cluster": 1}, {"month": 6, "hour": 17, "pm25_raw": 33.0, "aqi": 91.7, "cluster": 1}, {"month": 6, "hour": 18, "pm25_raw": 33.0, "aqi": 92.3, "cluster": 1}, {"month": 6, "hour": 19, "pm25_raw": 35.9, "aqi": 96.2, "cluster": 1}, {"month": 6, "hour": 20, "pm25_raw": 38.2, "aqi": 101.4, "cluster": 1}, {"month": 6, "hour": 21, "pm25_raw": 40.0, "aqi": 106.0, "cluster": 1}, {"month": 6, "hour": 22, "pm25_raw": 41.6, "aqi": 108.9, "cluster": 1}, {"month": 6, "hour": 23, "pm25_raw": 39.4, "aqi": 107.2, "cluster": 1}, {"month": 7, "hour": 0, "pm25_raw": 30.6, "aqi": 91.1, "cluster": 3}, {"month": 7, "hour": 1, "pm25_raw": 33.0, "aqi": 91.2, "cluster": 3}, {"month": 7, "hour": 2, "pm25_raw": 35.6, "aqi": 93.7, "cluster": 3}, {"month": 7, "hour": 3, "pm25_raw": 35.4, "aqi": 94.6, "cluster": 3}, {"month": 7, "hour": 4, "pm25_raw": 39.1, "aqi": 92.6, "cluster": 3}, {"month": 7, "hour": 5, "pm25_raw": 29.7, "aqi": 88.2, "cluster": 3}, {"month": 7, "hour": 6, "pm25_raw": 38.8, "aqi": 88.1, "cluster": 3}, {"month": 7, "hour": 7, "pm25_raw": 35.0, "aqi": 87.9, "cluster": 3}, {"month": 7, "hour": 8, "pm25_raw": 34.5, "aqi": 86.6, "cluster": 3}, {"month": 7, "hour": 9, "pm25_raw": 27.5, "aqi": 84.0, "cluster": 3}, {"month": 7, "hour": 10, "pm25_raw": 29.3, "aqi": 84.1, "cluster": 3}, {"month": 7, "hour": 11, "pm25_raw": 41.7, "aqi": 82.2, "cluster": 3}, {"month": 7, "hour": 12, "pm25_raw": 26.8, "aqi": 81.8, "cluster": 1}, {"month": 7, "hour": 13, "pm25_raw": 32.9, "aqi": 81.4, "cluster": 1}, {"month": 7, "hour": 14, "pm25_raw": 36.3, "aqi": 80.7, "cluster": 1}, {"month": 7, "hour": 15, "pm25_raw": 33.3, "aqi": 82.2, "cluster": 1}, {"month": 7, "hour": 16, "pm25_raw": 26.1, "aqi": 80.8, "cluster": 1}, {"month": 7, "hour": 17, "pm25_raw": 32.0, "aqi": 81.3, "cluster": 1}, {"month": 7, "hour": 18, "pm25_raw": 26.6, "aqi": 81.2, "cluster": 1}, {"month": 7, "hour": 19, "pm25_raw": 30.3, "aqi": 85.1, "cluster": 1}, {"month": 7, "hour": 20, "pm25_raw": 32.1, "aqi": 89.3, "cluster": 1}, {"month": 7, "hour": 21, "pm25_raw": 32.3, "aqi": 91.2, "cluster": 1}, {"month": 7, "hour": 22, "pm25_raw": 32.7, "aqi": 92.2, "cluster": 1}, {"month": 7, "hour": 23, "pm25_raw": 33.5, "aqi": 93.2, "cluster": 1}, {"month": 8, "hour": 0, "pm25_raw": 43.2, "aqi": 100.6, "cluster": 3}, {"month": 8, "hour": 1, "pm25_raw": 38.9, "aqi": 101.3, "cluster": 3}, {"month": 8, "hour": 2, "pm25_raw": 38.1, "aqi": 99.2, "cluster": 3}, {"month": 8, "hour": 3, "pm25_raw": 36.1, "aqi": 97.7, "cluster": 3}, {"month": 8, "hour": 4, "pm25_raw": 33.5, "aqi": 93.7, "cluster": 3}, {"month": 8, "hour": 5, "pm25_raw": 32.8, "aqi": 89.9, "cluster": 3}, {"month": 8, "hour": 6, "pm25_raw": 39.8, "aqi": 89.7, "cluster": 3}, {"month": 8, "hour": 7, "pm25_raw": 40.4, "aqi": 90.0, "cluster": 3}, {"month": 8, "hour": 8, "pm25_raw": 49.6, "aqi": 89.1, "cluster": 3}, {"month": 8, "hour": 9, "pm25_raw": 37.3, "aqi": 86.4, "cluster": 3}, {"month": 8, "hour": 10, "pm25_raw": 33.3, "aqi": 85.2, "cluster": 3}, {"month": 8, "hour": 11, "pm25_raw": 37.1, "aqi": 86.6, "cluster": 3}, {"month": 8, "hour": 12, "pm25_raw": 47.7, "aqi": 85.2, "cluster": 3}, {"month": 8, "hour": 13, "pm25_raw": 37.5, "aqi": 85.4, "cluster": 1}, {"month": 8, "hour": 14, "pm25_raw": 42.6, "aqi": 85.3, "cluster": 1}, {"month": 8, "hour": 15, "pm25_raw": 35.9, "aqi": 83.4, "cluster": 1}, {"month": 8, "hour": 16, "pm25_raw": 42.5, "aqi": 83.2, "cluster": 1}, {"month": 8, "hour": 17, "pm25_raw": 41.1, "aqi": 85.4, "cluster": 1}, {"month": 8, "hour": 18, "pm25_raw": 30.8, "aqi": 87.1, "cluster": 1}, {"month": 8, "hour": 19, "pm25_raw": 34.5, "aqi": 91.5, "cluster": 1}, {"month": 8, "hour": 20, "pm25_raw": 37.9, "aqi": 97.2, "cluster": 1}, {"month": 8, "hour": 21, "pm25_raw": 45.0, "aqi": 101.0, "cluster": 1}, {"month": 8, "hour": 22, "pm25_raw": 43.3, "aqi": 101.9, "cluster": 1}, {"month": 8, "hour": 23, "pm25_raw": 40.9, "aqi": 103.5, "cluster": 1}, {"month": 9, "hour": 0, "pm25_raw": 40.3, "aqi": 108.7, "cluster": 3}, {"month": 9, "hour": 1, "pm25_raw": 42.3, "aqi": 108.8, "cluster": 3}, {"month": 9, "hour": 2, "pm25_raw": 39.8, "aqi": 106.7, "cluster": 3}, {"month": 9, "hour": 3, "pm25_raw": 38.1, "aqi": 103.2, "cluster": 3}, {"month": 9, "hour": 4, "pm25_raw": 37.2, "aqi": 101.9, "cluster": 3}, {"month": 9, "hour": 5, "pm25_raw": 34.1, "aqi": 97.3, "cluster": 3}, {"month": 9, "hour": 6, "pm25_raw": 33.1, "aqi": 95.3, "cluster": 3}, {"month": 9, "hour": 7, "pm25_raw": 39.3, "aqi": 99.3, "cluster": 3}, {"month": 9, "hour": 8, "pm25_raw": 37.0, "aqi": 100.3, "cluster": 3}, {"month": 9, "hour": 9, "pm25_raw": 33.6, "aqi": 98.6, "cluster": 3}, {"month": 9, "hour": 10, "pm25_raw": 31.7, "aqi": 95.5, "cluster": 3}, {"month": 9, "hour": 11, "pm25_raw": 28.8, "aqi": 91.3, "cluster": 3}, {"month": 9, "hour": 12, "pm25_raw": 27.5, "aqi": 88.0, "cluster": 3}, {"month": 9, "hour": 13, "pm25_raw": 29.0, "aqi": 87.5, "cluster": 1}, {"month": 9, "hour": 14, "pm25_raw": 29.5, "aqi": 86.7, "cluster": 1}, {"month": 9, "hour": 15, "pm25_raw": 30.5, "aqi": 88.1, "cluster": 1}, {"month": 9, "hour": 16, "pm25_raw": 32.2, "aqi": 91.4, "cluster": 1}, {"month": 9, "hour": 17, "pm25_raw": 32.0, "aqi": 92.3, "cluster": 1}, {"month": 9, "hour": 18, "pm25_raw": 35.2, "aqi": 96.0, "cluster": 1}, {"month": 9, "hour": 19, "pm25_raw": 40.1, "aqi": 103.1, "cluster": 1}, {"month": 9, "hour": 20, "pm25_raw": 41.7, "aqi": 107.7, "cluster": 1}, {"month": 9, "hour": 21, "pm25_raw": 40.3, "aqi": 108.7, "cluster": 1}, {"month": 9, "hour": 22, "pm25_raw": 43.5, "aqi": 110.6, "cluster": 1}, {"month": 9, "hour": 23, "pm25_raw": 41.3, "aqi": 110.1, "cluster": 1}, {"month": 10, "hour": 0, "pm25_raw": 72.2, "aqi": 145.0, "cluster": 3}, {"month": 10, "hour": 1, "pm25_raw": 71.2, "aqi": 143.9, "cluster": 3}, {"month": 10, "hour": 2, "pm25_raw": 72.0, "aqi": 144.1, "cluster": 3}, {"month": 10, "hour": 3, "pm25_raw": 66.4, "aqi": 141.7, "cluster": 3}, {"month": 10, "hour": 4, "pm25_raw": 64.9, "aqi": 139.8, "cluster": 3}, {"month": 10, "hour": 5, "pm25_raw": 60.7, "aqi": 136.0, "cluster": 3}, {"month": 10, "hour": 6, "pm25_raw": 63.3, "aqi": 135.9, "cluster": 3}, {"month": 10, "hour": 7, "pm25_raw": 68.6, "aqi": 138.1, "cluster": 3}, {"month": 10, "hour": 8, "pm25_raw": 61.1, "aqi": 136.4, "cluster": 3}, {"month": 10, "hour": 9, "pm25_raw": 55.3, "aqi": 132.9, "cluster": 3}, {"month": 10, "hour": 10, "pm25_raw": 51.9, "aqi": 129.3, "cluster": 3}, {"month": 10, "hour": 11, "pm25_raw": 47.5, "aqi": 125.5, "cluster": 3}, {"month": 10, "hour": 12, "pm25_raw": 44.3, "aqi": 121.0, "cluster": 3}, {"month": 10, "hour": 13, "pm25_raw": 44.6, "aqi": 118.6, "cluster": 1}, {"month": 10, "hour": 14, "pm25_raw": 44.4, "aqi": 116.4, "cluster": 1}, {"month": 10, "hour": 15, "pm25_raw": 43.2, "aqi": 115.0, "cluster": 1}, {"month": 10, "hour": 16, "pm25_raw": 45.2, "aqi": 116.0, "cluster": 1}, {"month": 10, "hour": 17, "pm25_raw": 48.7, "aqi": 119.1, "cluster": 1}, {"month": 10, "hour": 18, "pm25_raw": 56.7, "aqi": 127.0, "cluster": 1}, {"month": 10, "hour": 19, "pm25_raw": 64.2, "aqi": 134.5, "cluster": 1}, {"month": 10, "hour": 20, "pm25_raw": 68.3, "aqi": 139.9, "cluster": 1}, {"month": 10, "hour": 21, "pm25_raw": 72.9, "aqi": 144.9, "cluster": 1}, {"month": 10, "hour": 22, "pm25_raw": 71.8, "aqi": 145.1, "cluster": 1}, {"month": 10, "hour": 23, "pm25_raw": 72.2, "aqi": 145.3, "cluster": 1}, {"month": 11, "hour": 0, "pm25_raw": 138.0, "aqi": 194.7, "cluster": 2}, {"month": 11, "hour": 1, "pm25_raw": 137.6, "aqi": 196.4, "cluster": 2}, {"month": 11, "hour": 2, "pm25_raw": 135.5, "aqi": 196.7, "cluster": 2}, {"month": 11, "hour": 3, "pm25_raw": 130.8, "aqi": 194.9, "cluster": 2}, {"month": 11, "hour": 4, "pm25_raw": 131.9, "aqi": 194.1, "cluster": 2}, {"month": 11, "hour": 5, "pm25_raw": 128.7, "aqi": 192.9, "cluster": 2}, {"month": 11, "hour": 6, "pm25_raw": 127.9, "aqi": 192.2, "cluster": 2}, {"month": 11, "hour": 7, "pm25_raw": 133.8, "aqi": 193.8, "cluster": 2}, {"month": 11, "hour": 8, "pm25_raw": 126.3, "aqi": 192.1, "cluster": 2}, {"month": 11, "hour": 9, "pm25_raw": 117.2, "aqi": 185.8, "cluster": 2}, {"month": 11, "hour": 10, "pm25_raw": 93.6, "aqi": 174.2, "cluster": 2}, {"month": 11, "hour": 11, "pm25_raw": 74.4, "aqi": 162.2, "cluster": 2}, {"month": 11, "hour": 12, "pm25_raw": 67.0, "aqi": 152.9, "cluster": 2}, {"month": 11, "hour": 13, "pm25_raw": 63.2, "aqi": 146.2, "cluster": 2}, {"month": 11, "hour": 14, "pm25_raw": 64.4, "aqi": 143.3, "cluster": 2}, {"month": 11, "hour": 15, "pm25_raw": 65.9, "aqi": 142.6, "cluster": 2}, {"month": 11, "hour": 16, "pm25_raw": 66.4, "aqi": 143.4, "cluster": 2}, {"month": 11, "hour": 17, "pm25_raw": 74.1, "aqi": 148.5, "cluster": 2}, {"month": 11, "hour": 18, "pm25_raw": 96.0, "aqi": 160.3, "cluster": 2}, {"month": 11, "hour": 19, "pm25_raw": 115.2, "aqi": 170.7, "cluster": 2}, {"month": 11, "hour": 20, "pm25_raw": 121.3, "aqi": 178.2, "cluster": 2}, {"month": 11, "hour": 21, "pm25_raw": 128.9, "aqi": 185.6, "cluster": 2}, {"month": 11, "hour": 22, "pm25_raw": 129.0, "aqi": 188.4, "cluster": 2}, {"month": 11, "hour": 23, "pm25_raw": 135.1, "aqi": 192.4, "cluster": 2}, {"month": 12, "hour": 0, "pm25_raw": 192.7, "aqi": 240.6, "cluster": 2}, {"month": 12, "hour": 1, "pm25_raw": 189.4, "aqi": 241.5, "cluster": 2}, {"month": 12, "hour": 2, "pm25_raw": 184.9, "aqi": 240.1, "cluster": 2}, {"month": 12, "hour": 3, "pm25_raw": 180.4, "aqi": 237.5, "cluster": 2}, {"month": 12, "hour": 4, "pm25_raw": 182.4, "aqi": 237.2, "cluster": 2}, {"month": 12, "hour": 5, "pm25_raw": 173.6, "aqi": 232.9, "cluster": 2}, {"month": 12, "hour": 6, "pm25_raw": 171.3, "aqi": 229.7, "cluster": 2}, {"month": 12, "hour": 7, "pm25_raw": 174.8, "aqi": 229.7, "cluster": 2}, {"month": 12, "hour": 8, "pm25_raw": 175.5, "aqi": 229.9, "cluster": 2}, {"month": 12, "hour": 9, "pm25_raw": 166.9, "aqi": 226.5, "cluster": 2}, {"month": 12, "hour": 10, "pm25_raw": 154.4, "aqi": 220.1, "cluster": 2}, {"month": 12, "hour": 11, "pm25_raw": 128.6, "aqi": 206.3, "cluster": 2}, {"month": 12, "hour": 12, "pm25_raw": 108.2, "aqi": 191.1, "cluster": 2}, {"month": 12, "hour": 13, "pm25_raw": 98.7, "aqi": 180.2, "cluster": 2}, {"month": 12, "hour": 14, "pm25_raw": 91.3, "aqi": 172.4, "cluster": 2}, {"month": 12, "hour": 15, "pm25_raw": 98.2, "aqi": 169.3, "cluster": 2}, {"month": 12, "hour": 16, "pm25_raw": 94.7, "aqi": 168.8, "cluster": 2}, {"month": 12, "hour": 17, "pm25_raw": 107.4, "aqi": 173.6, "cluster": 2}, {"month": 12, "hour": 18, "pm25_raw": 133.5, "aqi": 184.2, "cluster": 2}, {"month": 12, "hour": 19, "pm25_raw": 157.4, "aqi": 197.6, "cluster": 2}, {"month": 12, "hour": 20, "pm25_raw": 172.3, "aqi": 211.2, "cluster": 2}, {"month": 12, "hour": 21, "pm25_raw": 180.9, "aqi": 222.5, "cluster": 2}, {"month": 12, "hour": 22, "pm25_raw": 185.7, "aqi": 230.5, "cluster": 2}, {"month": 12, "hour": 23, "pm25_raw": 190.9, "aqi": 237.1, "cluster": 2}];
+
+const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const clusterInfo = {
+  0: {label: "Hazardous", grad: "linear-gradient(135deg, #8B0000 0%, #C0392B 100%)"},
+  1: {label: "Unhealthy for sensitive", grad: "linear-gradient(135deg, #D68910 0%, #F39C12 100%)"},
+  2: {label: "Very unhealthy", grad: "linear-gradient(135deg, #B9770E 0%, #DC7633 100%)"},
+  3: {label: "Moderate", grad: "linear-gradient(135deg, #229954 0%, #52BE80 100%)"}
+};
+
+const monthSel = document.getElementById('monthSel');
+const hourSel = document.getElementById('hourSel');
+monthNames.forEach((m,i)=>{
+  const o = document.createElement('option');
+  o.value = i+1; o.textContent = m;
+  if(i===0) o.selected = true;
+  monthSel.appendChild(o);
+});
+for(let h=0; h<24; h++){
+  const o = document.createElement('option');
+  o.value = h; o.textContent = (h%12===0?12:h%12) + (h<12?' AM':' PM');
+  if(h===8) o.selected = true;
+  hourSel.appendChild(o);
+}
+
+function aqiCategory(aqi){
+  if(aqi<=50) return "Good";
+  if(aqi<=100) return "Moderate";
+  if(aqi<=150) return "Unhealthy for sensitive groups";
+  if(aqi<=200) return "Unhealthy";
+  if(aqi<=300) return "Very unhealthy";
+  return "Hazardous";
+}
+
+let chart;
+function render(){
+  const month = parseInt(monthSel.value);
+  const hour = parseInt(hourSel.value);
+  const row = data.find(d=>d.month===month && d.hour===hour);
+  const monthRows = data.filter(d=>d.month===month).sort((a,b)=>a.hour-b.hour);
+
+  document.getElementById('pmOut').textContent = row.pm25_raw.toFixed(1);
+  document.getElementById('aqiOut').textContent = row.aqi.toFixed(0);
+  document.getElementById('aqiCatOut').textContent = aqiCategory(row.aqi);
+
+  const info = clusterInfo[row.cluster];
+  document.getElementById('riskBox').style.background = info.grad;
+  document.getElementById('riskOut').textContent = info.label;
+
+  const labels = monthRows.map(d=>d.hour + ":00");
+  const values = monthRows.map(d=>d.pm25_raw);
+
+  if(chart) chart.destroy();
+  chart = new Chart(document.getElementById('dayChart'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        borderColor: '#667eea',
+        backgroundColor: 'rgba(102,126,234,0.15)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: labels.map((l,i)=>i===hour?7:0),
+        pointBackgroundColor: '#f5576c',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        borderWidth: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display:false }, ticks:{color:'#64748b', font:{size:11}} },
+        y: { grid: { color: '#eef2f6' }, ticks:{color:'#64748b', font:{size:11}}, title:{display:true, text:'PM2.5 (µg/m³)', color:'#64748b'} }
+      }
+    }
+  });
+}
+
+monthSel.addEventListener('change', render);
+hourSel.addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

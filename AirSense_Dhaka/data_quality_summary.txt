@@ -1,0 +1,28 @@
+AirSense Dhaka - Data Quality Summary
+
+==================================================
+Source files merged: 7 (years 2016-2022)
+Final date range: 2016-01-01 01:00:00 to 2022-06-01 01:00:00
+Total hourly rows (continuous): 56233
+Rows originally missing (-999): 4990 (8.9%)
+Rows recovered via linear interpolation (gaps <=24h): 2536
+Rows still missing after interpolation (gaps >24h, left as NaN): 2454 (4.4%)
+
+Rows per year:
+year
+2016    8783
+2017    8760
+2018    8760
+2019    8760
+2020    8784
+2021    8760
+2022    3626
+dtype: int64
+
+Average PM2.5 by season:
+season
+Winter          169.631042
+Post-Monsoon    139.448769
+Pre-Monsoon      79.729908
+Monsoon          74.324790
+Name: pm25_raw, dtype: float64
